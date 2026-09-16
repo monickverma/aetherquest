@@ -1,6 +1,10 @@
+import { createHash } from "node:crypto";
+
+import { lt, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { db, rateLimits } from "@/db";
 import { UnauthorizedError } from "./session";
 import { firstIssue } from "./validation";
 
@@ -76,71 +80,64 @@ export async function readJson<S extends z.ZodType>(
 }
 
 /* ── rate limiting ─────────────────────────────────────────────
-   A deliberately small in-memory limiter for the auth endpoints:
-   enough to blunt credential stuffing against a single instance.
-   It is per-process, so on a multi-instance deployment it is a
-   speed bump rather than a guarantee — see the README.
+   Fixed-window counters for the auth endpoints, kept in the
+   database. An in-memory Map would be per-process, and a serverless
+   deployment spreads requests across many short-lived instances, so
+   no single counter would ever reach the limit.
+
+   Each attempt is one atomic UPSERT ... RETURNING: it either opens a
+   fresh window or increments the live one, and hands back the count
+   in the same round trip, so concurrent attempts cannot race past
+   the limit. Keys are SHA-256 hashes, so no raw IP is ever stored.
    ──────────────────────────────────────────────────────────── */
 
-type Bucket = { count: number; resetAt: number };
-
-const globalForLimiter = globalThis as unknown as {
-  __aetherquestBuckets?: Map<string, Bucket>;
-};
-
-const buckets =
-  globalForLimiter.__aetherquestBuckets ??
-  (globalForLimiter.__aetherquestBuckets = new Map<string, Bucket>());
-
-export function rateLimit(
-  key: string,
-  limit: number,
-  windowMs: number,
-): { allowed: boolean; retryAfterSeconds: number } {
-  const now = Date.now();
-  const bucket = buckets.get(key);
-
-  if (!bucket || now > bucket.resetAt) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    // Opportunistic sweep so the map cannot grow without bound.
-    if (buckets.size > 5_000) {
-      for (const [k, v] of buckets) if (now > v.resetAt) buckets.delete(k);
-    }
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-
-  bucket.count += 1;
-  if (bucket.count > limit) {
-    return {
-      allowed: false,
-      retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000),
-    };
-  }
-  return { allowed: true, retryAfterSeconds: 0 };
-}
-
-/** Best-effort client identity for rate limiting. */
-export function clientKey(request: Request, scope: string): string {
+/**
+ * The client's address. On Vercel `x-forwarded-for` is overwritten at the
+ * edge with the real client IP (external values are not forwarded), so it
+ * cannot be spoofed there. Locally it falls back to a shared bucket.
+ */
+function clientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() || "local";
-  return `${scope}:${ip}`;
+  return (
+    forwarded?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    "local"
+  );
 }
 
-export function enforceRateLimit(
+function bucketKey(scope: string, ip: string): string {
+  return createHash("sha256").update(`${scope}:${ip}`).digest("hex");
+}
+
+export async function enforceRateLimit(
   request: Request,
   scope: string,
   limit: number,
   windowMs: number,
-): void {
-  const { allowed, retryAfterSeconds } = rateLimit(
-    clientKey(request, scope),
-    limit,
-    windowMs,
-  );
-  if (!allowed) {
-    throw new AppError(
-      `Too many attempts. Try again in ${retryAfterSeconds} seconds.`,
-      429,
-    );
+): Promise<void> {
+  const key = bucketKey(scope, clientIp(request));
+  const now = Date.now();
+
+  const [bucket] = await db
+    .insert(rateLimits)
+    .values({ key, count: 1, resetAt: now + windowMs })
+    .onConflictDoUpdate({
+      target: rateLimits.key,
+      set: {
+        // Both expressions read the row as it was before this update.
+        count: sql`case when ${rateLimits.resetAt} <= ${now} then 1 else ${rateLimits.count} + 1 end`,
+        resetAt: sql`case when ${rateLimits.resetAt} <= ${now} then ${now + windowMs} else ${rateLimits.resetAt} end`,
+      },
+    })
+    .returning({ count: rateLimits.count, resetAt: rateLimits.resetAt });
+
+  // Opportunistic sweep of closed windows, so the table stays small.
+  if (Math.random() < 0.02) {
+    await db.delete(rateLimits).where(lt(rateLimits.resetAt, now));
+  }
+
+  if (bucket && bucket.count > limit) {
+    const seconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    throw new AppError(`Too many attempts. Try again in ${seconds} seconds.`, 429);
   }
 }

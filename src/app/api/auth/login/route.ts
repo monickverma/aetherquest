@@ -18,7 +18,7 @@ const DUMMY_HASH =
 
 export async function POST(request: Request) {
   return handle(async () => {
-    enforceRateLimit(request, "login", 10, 10 * 60 * 1000);
+    await enforceRateLimit(request, "login", 10, 10 * 60 * 1000);
 
     const input = await readJson(request, loginSchema);
 

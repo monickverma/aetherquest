@@ -105,7 +105,7 @@ Level is **never stored**. It is derived from total XP every time, so the two ca
 
 ## Getting started
 
-**Requirements:** Node.js **20.12+** (22 recommended) and npm.
+**Requirements:** Node.js **22** and npm.
 
 ```bash
 git clone https://github.com/monickverma/aetherquest.git
@@ -129,7 +129,7 @@ Open <http://localhost:3000> and create a character.
 | `npm run db:push` | Sync the schema in `src/db/schema.ts` to the database |
 | `npm run db:seed` | Upsert the Vault catalogue (idempotent, safe in production) |
 | `npm run db:studio` | Browse the database in Drizzle Studio |
-| `npm run test:api` | Run the 82-check API test suite against a running dev server |
+| `npm run test:api` | Run the 83-check API test suite against a running server |
 
 ---
 
@@ -168,7 +168,7 @@ The `vercel-build` script runs automatically and:
 
 So the first deploy creates its own tables, and every later deploy keeps the catalogue in step with the code.
 
-**Keep the functions next to the database.** [`vercel.json`](vercel.json) pins functions to `bom1` (Mumbai) because this project's Turso database lives in `ap-south-1`. A completion runs several statements, and each one is a network round trip. With the functions on another continent, loading the Sanctum took about 3 seconds; in the same region, it's a fraction of that. If your database is elsewhere, change `regions` to the nearest [Vercel region](https://vercel.com/docs/regions).
+**Keep the functions next to the database.** [`vercel.json`](vercel.json) pins functions to `bom1` (Mumbai) because this project's Turso database lives in `ap-south-1`. A completion runs several statements, and each one is a network round trip. Measured on this deployment, moving the functions from `iad1` to `bom1` took loading the Sanctum from 3.2s to 0.4s, sealing a quest from 3.1s to 0.4s, and fetching quests from 1.2s to 0.27s. If your database is elsewhere, change `regions` to the nearest [Vercel region](https://vercel.com/docs/regions).
 
 ---
 
@@ -200,6 +200,7 @@ Drizzle ORM ── libSQL (SQLite file locally · Turso in production)
 | `deeds` | append-only completion ledger with snapshotted title and the exact award paid |
 | `items` | the Vault catalogue (seeded) |
 | `inventory` | what each user owns, and what they paid |
+| `rate_limits` | fixed-window counters for sign-in and sign-up, keyed by a hash of scope + IP |
 
 **The snapshot.** Every mutation returns one fully-computed payload (character, attributes, quests, 14-day activity, totals). The browser renders it and never recomputes levels from raw XP.
 
@@ -217,8 +218,7 @@ The client names a quest; the server decides what it's worth.
 - **Ownership on every query.** Quest, deed, and inventory queries are scoped by `user_id`. Touching another player's quest returns `404`, which doesn't even confirm it exists.
 - **No account enumeration.** A wrong password and an unknown email return the same message and take the same time, because unknown emails are still compared against a real bcrypt hash.
 - **Validated input.** Zod schemas with length caps on every body; unknown fields are stripped.
-- **Rate limiting** on sign-in (10 per 10 minutes per IP) and sign-up (8 per 10 minutes).
-  *Caveat:* the limiter is in-memory and per instance. On a multi-instance deployment it slows attackers down but isn't a hard guarantee; a shared store such as Redis would make it one.
+- **Rate limiting** on sign-in (10 per 10 minutes per IP) and sign-up (8 per 10 minutes). The counters live in the database, not in memory: serverless requests are spread across many instances, and a per-process counter never reaches its limit (the production test run caught exactly that before the fix). Each attempt is one atomic `UPSERT … RETURNING`, so simultaneous attempts can't slip past, and keys are SHA-256 hashes, so no raw IPs are stored. On Vercel the client IP comes from `x-forwarded-for`, which the edge overwrites and so can't be spoofed.
 - **Headers:** `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, a strict `Referrer-Policy`, and a restrictive `Permissions-Policy`.
 
 ---
@@ -268,7 +268,7 @@ The client names a quest; the server decides what it's worth.
 
 ## Testing
 
-`scripts/api-test.sh` runs **82 adversarial checks** against a running dev server:
+`scripts/api-test.sh` runs **83 adversarial checks** against a running server:
 
 - registration and login validation, duplicate emails, and no account enumeration;
 - tampered, forged (`alg: none`), and missing session tokens;
@@ -278,14 +278,21 @@ The client names a quest; the server decides what it's worth.
 - undo, including exact XP reversal;
 - **cross-user isolation:** user B cannot read, edit, delete, complete, or undo user A's data;
 - the Vault: insufficient gold, level locks, double purchase, wrong equip slot, and equip/unequip;
-- page protection, open-redirect sanitising, and rate limiting.
+- page protection and open-redirect sanitising;
+- rate limiting, including **15 simultaneous sign-in attempts → exactly 5 rejected**.
 
 ```bash
 npm run dev          # terminal 1
-npm run test:api     # terminal 2  →  RESULT: 82 passed, 0 failed
+npm run test:api     # terminal 2  →  RESULT: 83 passed, 0 failed
 ```
 
-The suite uses a local file database, because one fixture grants gold directly in `data/aetherquest.db`.
+Against a deployment, set `BASE_URL`:
+
+```bash
+BASE_URL=https://aetherquest-black.vercel.app npm run test:api   # → 74 passed, 0 failed
+```
+
+Nine equip checks grant gold directly in `data/aetherquest.db`, so they only run locally. Remote runs create a few `@test.dev` accounts, and they deliberately fill the rate-limit window for your own IP, so sign-in from that network is blocked for up to 10 minutes afterwards.
 
 ---
 

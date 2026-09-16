@@ -185,6 +185,24 @@ export const inventory = sqliteTable(
   (t) => [uniqueIndex("inventory_user_item_unique").on(t.userId, t.itemId)],
 );
 
+/* ── rate limits ───────────────────────────────────────────────
+   Fixed-window counters for the auth endpoints. They live in the
+   database rather than in memory because a serverless deployment
+   runs many short-lived instances, and a per-process counter is
+   never shared between them. The key is a hash, never a raw IP.
+   ──────────────────────────────────────────────────────────── */
+
+export const rateLimits = sqliteTable(
+  "rate_limits",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull(),
+    /** Epoch milliseconds at which the current window closes. */
+    resetAt: integer("reset_at").notNull(),
+  },
+  (t) => [index("rate_limits_reset_idx").on(t.resetAt)],
+);
+
 /* ── relations ─────────────────────────────────────────────── */
 
 export const usersRelations = relations(users, ({ one, many }) => ({

@@ -176,6 +176,19 @@ check "deed survives, title as it was when sealed" "Lift heavy things" "$(jq_ ".
 echo "== rate limiting"
 for i in $(seq 1 11); do curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/json' --data "{\"email\":\"rl$RUN@t.dev\",\"password\":\"x\"}" -H "x-forwarded-for: 10.9.$RUN.1" $B/api/auth/login; done > $D/rl.txt
 check "11th login attempt from one IP -> 429" 429 "$(tail -1 $D/rl.txt)"
+for i in $(seq 1 15); do
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/json' --data "{\"email\":\"rlp$RUN@t.dev\",\"password\":\"x\"}" -H "x-forwarded-for: 10.8.$RUN.2" $B/api/auth/login &
+done > $D/rlp.txt
+wait
+if [[ "$B" == http://localhost* ]]; then
+  # A fresh bucket: the counter is atomic, so exactly 10 get through.
+  check "15 simultaneous attempts: exactly 5 rejected" 5 "$(grep -c '^429$' $D/rlp.txt)"
+else
+  # Deployed, the edge keys every request on your real IP, whose bucket the
+  # sequential test above already filled. A per-instance counter would let
+  # some of these through; a shared one rejects all of them.
+  check "15 simultaneous attempts across instances: all rejected" 15 "$(grep -c '^429$' $D/rlp.txt)"
+fi
 
 echo
 echo "RESULT: $pass passed, $fail failed"
