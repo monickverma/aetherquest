@@ -4,7 +4,7 @@
 
 It is a full-stack app. Every number the player sees is computed and stored on the server, so progress survives a refresh, follows you across devices, and cannot be edited into existence from the browser.
 
-> **Live:** _add your Vercel URL here after deploying_ · **Demo video:** _add link_
+> **Live:** [aetherquest-black.vercel.app](https://aetherquest-black.vercel.app) · **Demo video:** _add link_
 
 ---
 
@@ -167,6 +167,8 @@ The `vercel-build` script runs automatically and:
 4. runs `next build`.
 
 So the first deploy creates its own tables, and every later deploy keeps the catalogue in step with the code.
+
+**Keep the functions next to the database.** [`vercel.json`](vercel.json) pins functions to `bom1` (Mumbai) because this project's Turso database lives in `ap-south-1`. A completion runs several statements, and each one is a network round trip. With the functions on another continent, loading the Sanctum took about 3 seconds; in the same region, it's a fraction of that. If your database is elsewhere, change `regions` to the nearest [Vercel region](https://vercel.com/docs/regions).
 
 ---
 
