@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: start the dev server (npm run dev), then run: npm run test:api
 # Against a deployment: BASE_URL=https://your-app.vercel.app npm run test:api
-# Nine equip checks grant gold directly in data/aetherquest.db, so they only run against localhost.
+# Eight equip checks grant gold directly in data/aetherquest.db, so they only run against localhost.
 # Adversarial API checks against a running server.
 B=${BASE_URL:-http://localhost:3000}; B=${B%/}
 D=$(mktemp -d)
@@ -146,7 +146,7 @@ req $A GET /api/vault >/dev/null
 check "vault marks Quill as equipped" true "$(jq_ ".items.find(i=>i.id==='sigil-quill').equipped")"
 check "vault marks Ember as owned, not equipped" "true,false" "$(jq_ ".items.filter(i=>i.id==='sigil-ember').map(i=>[i.owned,i.equipped]).join()")"
 else
-  echo "  (skipped 9 equip checks: their gold fixture writes to the local database file)"
+  echo "  (skipped 8 equip checks: their gold fixture writes to the local database file)"
 fi
 check "unequip -> 200" 200 "$(req $A POST /api/vault/equip '{"slot":"sigil","itemId":null}')"
 check "sigil cleared" null "$(jq_ '.snapshot.character.sigil')"
@@ -174,20 +174,40 @@ req $A GET /api/codex >/dev/null
 check "deed survives, title as it was when sealed" "Lift heavy things" "$(jq_ ".deeds.find(d=>d.xpAwarded===204).questTitle")"
 
 echo "== rate limiting"
-for i in $(seq 1 11); do curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/json' --data "{\"email\":\"rl$RUN@t.dev\",\"password\":\"x\"}" -H "x-forwarded-for: 10.9.$RUN.1" $B/api/auth/login; done > $D/rl.txt
-check "11th login attempt from one IP -> 429" 429 "$(tail -1 $D/rl.txt)"
-for i in $(seq 1 15); do
-  curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/json' --data "{\"email\":\"rlp$RUN@t.dev\",\"password\":\"x\"}" -H "x-forwarded-for: 10.8.$RUN.2" $B/api/auth/login &
-done > $D/rlp.txt
-wait
+# Sign-in has two layers: 10 attempts per account-from-address and 30 per
+# address. All eleven attempts below share ONE keep-alive connection (curl
+# --next reuses it): separate connections can leave a NAT or multi-WAN network
+# from different public IPs, which the server rightly counts separately.
+login_attempt() { # email -> args for one POST, appended to the global array
+  args+=(-s -o /dev/null -w "%{http_code} %{num_connects}\n" -X POST
+         -H "content-type: application/json" -H "x-forwarded-for: 10.9.$RUN.1"
+         --data "{\"email\":\"$1\",\"password\":\"x\"}" "$B/api/auth/login")
+}
+args=()
+for i in $(seq 1 11); do
+  [ "$i" -gt 1 ] && args+=(--next)
+  login_attempt "rl$RUN@t.dev"
+done
+curl "${args[@]}" > $D/rl.txt
+check "11 sign-in attempts rode one reused connection" 1 "$(awk "\$2 > 0" $D/rl.txt | wc -l | tr -d " ")"
+check "11th attempt on one account -> 429" 429 "$(tail -1 $D/rl.txt | cut -d" " -f1)"
+args=(); login_attempt "someone-else$RUN@t.dev"
+check "a different account from the same client is not locked out (401, not 429)" 401 "$(curl "${args[@]}" | cut -d" " -f1)"
+
 if [[ "$B" == http://localhost* ]]; then
-  # A fresh bucket: the counter is atomic, so exactly 10 get through.
-  check "15 simultaneous attempts: exactly 5 rejected" 5 "$(grep -c '^429$' $D/rlp.txt)"
+  # The counters are single atomic UPSERTs, so these are exact under concurrency.
+  for i in $(seq 1 15); do
+    curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" --data "{\"email\":\"rlp$RUN@t.dev\",\"password\":\"x\"}" -H "x-forwarded-for: 10.8.$RUN.2" $B/api/auth/login &
+  done > $D/rlp.txt
+  wait
+  check "15 simultaneous attempts on one account: exactly 5 rejected" 5 "$(grep -c "^429$" $D/rlp.txt)"
+  for i in $(seq 1 31); do
+    curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" --data "{\"email\":\"spray$i-$RUN@t.dev\",\"password\":\"x\"}" -H "x-forwarded-for: 10.7.$RUN.3" $B/api/auth/login &
+  done > $D/spray.txt
+  wait
+  check "31 simultaneous attempts across accounts: exactly 1 rejected" 1 "$(grep -c "^429$" $D/spray.txt)"
 else
-  # Deployed, the edge keys every request on your real IP, whose bucket the
-  # sequential test above already filled. A per-instance counter would let
-  # some of these through; a shared one rejects all of them.
-  check "15 simultaneous attempts across instances: all rejected" 15 "$(grep -c '^429$' $D/rlp.txt)"
+  echo "  (skipped 2 simultaneous checks: parallel connections may leave from different public IPs)"
 fi
 
 echo

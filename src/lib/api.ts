@@ -105,17 +105,23 @@ function clientIp(request: Request): string {
   );
 }
 
-function bucketKey(scope: string, ip: string): string {
-  return createHash("sha256").update(`${scope}:${ip}`).digest("hex");
+function bucketKey(scope: string, ip: string, subject: string): string {
+  return createHash("sha256").update(JSON.stringify([scope, ip, subject])).digest("hex");
 }
 
+/**
+ * Counts one attempt against a window, throwing a 429 once `limit` is passed.
+ * `subject` narrows the bucket further, e.g. to one account from one address,
+ * so a single mistyped password never counts against a whole shared network.
+ */
 export async function enforceRateLimit(
   request: Request,
   scope: string,
   limit: number,
   windowMs: number,
+  subject = "",
 ): Promise<void> {
-  const key = bucketKey(scope, clientIp(request));
+  const key = bucketKey(scope, clientIp(request), subject.toLowerCase());
   const now = Date.now();
 
   const [bucket] = await db

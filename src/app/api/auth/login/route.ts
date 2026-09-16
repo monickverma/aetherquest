@@ -16,11 +16,18 @@ import { loginSchema } from "@/lib/validation";
 const DUMMY_HASH =
   "$2b$12$ZAlWvTC8vi3aadiwbwmldOIVdr5nNDqX2J9YvYZPibihiARuAeq6i";
 
+const TEN_MINUTES = 10 * 60 * 1000;
+
 export async function POST(request: Request) {
   return handle(async () => {
-    await enforceRateLimit(request, "login", 10, 10 * 60 * 1000);
+    // Two layers: a generous cap per address stops one client spraying many
+    // accounts; a tight cap per account-from-address stops guessing one
+    // passphrase, without locking out everyone else behind the same network.
+    await enforceRateLimit(request, "login:ip", 30, TEN_MINUTES);
 
     const input = await readJson(request, loginSchema);
+
+    await enforceRateLimit(request, "login:account", 10, TEN_MINUTES, input.email);
 
     const [user] = await db
       .select()

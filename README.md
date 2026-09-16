@@ -129,7 +129,7 @@ Open <http://localhost:3000> and create a character.
 | `npm run db:push` | Sync the schema in `src/db/schema.ts` to the database |
 | `npm run db:seed` | Upsert the Vault catalogue (idempotent, safe in production) |
 | `npm run db:studio` | Browse the database in Drizzle Studio |
-| `npm run test:api` | Run the 83-check API test suite against a running server |
+| `npm run test:api` | Run the 86-check API test suite against a running server |
 
 ---
 
@@ -218,7 +218,7 @@ The client names a quest; the server decides what it's worth.
 - **Ownership on every query.** Quest, deed, and inventory queries are scoped by `user_id`. Touching another player's quest returns `404`, which doesn't even confirm it exists.
 - **No account enumeration.** A wrong password and an unknown email return the same message and take the same time, because unknown emails are still compared against a real bcrypt hash.
 - **Validated input.** Zod schemas with length caps on every body; unknown fields are stripped.
-- **Rate limiting** on sign-in (10 per 10 minutes per IP) and sign-up (8 per 10 minutes). The counters live in the database, not in memory: serverless requests are spread across many instances, and a per-process counter never reaches its limit (the production test run caught exactly that before the fix). Each attempt is one atomic `UPSERT … RETURNING`, so simultaneous attempts can't slip past, and keys are SHA-256 hashes, so no raw IPs are stored. On Vercel the client IP comes from `x-forwarded-for`, which the edge overwrites and so can't be spoofed.
+- **Layered rate limiting.** Sign-in allows 10 attempts per account per IP (which stops guessing one passphrase) and 30 per IP overall (which stops spraying many accounts), both over 10 minutes; sign-up allows 8 per IP. Because the tight limit is per account, one person mistyping a password never locks out everyone else behind the same office or campus network. The counters live in the database, not in memory: serverless requests are spread across many instances, and a per-process counter never reaches its limit (the production test run caught exactly that before the fix). Each attempt is one atomic `UPSERT … RETURNING`, so simultaneous attempts can't slip past, and keys are SHA-256 hashes, so no raw IPs or emails are stored. On Vercel the client IP comes from `x-forwarded-for`, which the edge overwrites and so can't be spoofed.
 - **Headers:** `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, a strict `Referrer-Policy`, and a restrictive `Permissions-Policy`.
 
 ---
@@ -268,7 +268,7 @@ The client names a quest; the server decides what it's worth.
 
 ## Testing
 
-`scripts/api-test.sh` runs **83 adversarial checks** against a running server:
+`scripts/api-test.sh` runs **86 adversarial checks** against a running server:
 
 - registration and login validation, duplicate emails, and no account enumeration;
 - tampered, forged (`alg: none`), and missing session tokens;
@@ -279,20 +279,20 @@ The client names a quest; the server decides what it's worth.
 - **cross-user isolation:** user B cannot read, edit, delete, complete, or undo user A's data;
 - the Vault: insufficient gold, level locks, double purchase, wrong equip slot, and equip/unequip;
 - page protection and open-redirect sanitising;
-- rate limiting, including **15 simultaneous sign-in attempts → exactly 5 rejected**.
+- rate limiting: the 11th attempt on one account is rejected, a different account from the same client still gets through, **15 simultaneous attempts on one account → exactly 5 rejected**, and **31 simultaneous attempts across accounts → exactly 1 rejected**.
 
 ```bash
 npm run dev          # terminal 1
-npm run test:api     # terminal 2  →  RESULT: 83 passed, 0 failed
+npm run test:api     # terminal 2  →  RESULT: 86 passed, 0 failed
 ```
 
 Against a deployment, set `BASE_URL`:
 
 ```bash
-BASE_URL=https://aetherquest-black.vercel.app npm run test:api   # → 74 passed, 0 failed
+BASE_URL=https://aetherquest-black.vercel.app npm run test:api   # → 76 passed, 0 failed
 ```
 
-Nine equip checks grant gold directly in `data/aetherquest.db`, so they only run locally. Remote runs create a few `@test.dev` accounts, and they deliberately fill the rate-limit window for your own IP, so sign-in from that network is blocked for up to 10 minutes afterwards.
+Ten checks run only locally: eight equip checks grant gold directly in `data/aetherquest.db`, and the simultaneous rate-limit checks need every request to leave from one IP, which NAT and multi-WAN networks don't guarantee. (The sequential check reuses a single connection so that it holds everywhere.) Remote runs create a few `@test.dev` accounts. Their rate-limit checks use throwaway addresses, so they don't lock out real sign-ins, but leave 10 minutes between remote runs, because each one uses most of the sign-up allowance for your IP.
 
 ---
 

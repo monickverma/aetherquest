@@ -38,7 +38,7 @@ const STARTER_QUESTS = [
 
 export async function POST(request: Request) {
   return handle(async () => {
-    await enforceRateLimit(request, "register", 8, 10 * 60 * 1000);
+    await enforceRateLimit(request, "register:ip", 8, 10 * 60 * 1000);
 
     const input = await readJson(request, registerSchema);
 
