@@ -1,0 +1,634 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   AETHERQUEST — "Arcane Grimoire"
+
+   The whole interface is one object: a dark book, lit from the
+   side. Ink for the ground, parchment for the text, antique gold
+   for anything the reader earned, sealing wax for anything that
+   commits. Nothing is pure white and nothing is pure black —
+   every value is warmed, the way old paper and old lamplight are.
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── ground: warmed near-blacks ───────────────────────────── */
+  --color-ink-950: #050403;
+  --color-ink-900: #0a0807;
+  --color-ink-850: #0f0c09;
+  --color-ink-800: #14100c;
+  --color-ink-700: #1c1711;
+  --color-ink-600: #262019;
+  --color-ink-500: #342c22;
+  --color-ink-400: #463c2e;
+
+  /* ── figure: parchment ────────────────────────────────────── */
+  --color-parchment: #ece1cb;
+  --color-parchment-dim: #bfb29a;
+  --color-parchment-faint: #8f8676;
+
+  /* ── earned: antique gold ─────────────────────────────────── */
+  --color-gold: #c9a227;
+  --color-gold-bright: #eccb69;
+  --color-gold-deep: #8a6d14;
+
+  /* ── committed: sealing wax ───────────────────────────────── */
+  --color-seal: #8c3330;
+  --color-seal-bright: #cb6259;
+
+  /* ── the five attributes ──────────────────────────────────── */
+  --color-might: #ca604c;
+  --color-intellect: #7189cc;
+  --color-discipline: #c9a227;
+  --color-vitality: #85a055;
+  --color-spirit: #a86fa0;
+
+  /* ── rarity ───────────────────────────────────────────────── */
+  --color-rarity-common: #8f8676;
+  --color-rarity-rare: #7189cc;
+  --color-rarity-epic: #a86fa0;
+  --color-rarity-legendary: #d99a3a;
+
+  /* ── type ─────────────────────────────────────────────────── */
+  --font-display: var(--font-cinzel), "Cinzel", "Trajan Pro", serif;
+  --font-body: var(--font-garamond), "EB Garamond", Georgia, serif;
+  --font-scribe: var(--font-fell), "IM Fell English", Georgia, serif;
+
+  /* ── motion ───────────────────────────────────────────────── */
+  --ease-ink: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-seal: cubic-bezier(0.34, 1.4, 0.44, 1);
+}
+
+/* ═══ tone helper ═══════════════════════════════════════════════
+   Attribute colours are resolved through one variable, so a card
+   can be tinted by setting --tone once on its root.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-tone="might"] { --tone: var(--color-might); }
+[data-tone="intellect"] { --tone: var(--color-intellect); }
+[data-tone="discipline"] { --tone: var(--color-discipline); }
+[data-tone="vitality"] { --tone: var(--color-vitality); }
+[data-tone="spirit"] { --tone: var(--color-spirit); }
+
+[data-rarity="common"] { --rarity: var(--color-rarity-common); }
+[data-rarity="rare"] { --rarity: var(--color-rarity-rare); }
+[data-rarity="epic"] { --rarity: var(--color-rarity-epic); }
+[data-rarity="legendary"] { --rarity: var(--color-rarity-legendary); }
+
+/* ═══ base ══════════════════════════════════════════════════════ */
+
+@layer base {
+  * {
+    border-color: var(--color-ink-500);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-ink-900);
+    color: var(--color-parchment);
+    font-family: var(--font-body);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    font-feature-settings: "liga" 1, "kern" 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+
+    /* Lamplight from the upper left, falling off into the gutter. */
+    background-image:
+      radial-gradient(
+        120ch 80ch at 12% -10%,
+        rgba(201, 162, 39, 0.07),
+        transparent 62%
+      ),
+      radial-gradient(
+        90ch 70ch at 95% 8%,
+        rgba(113, 137, 204, 0.045),
+        transparent 60%
+      ),
+      linear-gradient(180deg, var(--color-ink-900), var(--color-ink-950));
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  p { text-wrap: pretty; }
+
+  /* One focus treatment everywhere: a gold rule, never a browser blue. */
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: rgba(201, 162, 39, 0.3);
+    color: var(--color-parchment);
+  }
+
+  /* Tabular figures everywhere a number can change under the reader. */
+  .numeral {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+
+  input, textarea, select, button { font: inherit; color: inherit; }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--color-parchment-faint);
+    opacity: 1;
+    font-style: italic;
+  }
+
+  /* Scrollbars, dressed for the room. */
+  * { scrollbar-width: thin; scrollbar-color: var(--color-ink-500) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-500);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-400); background-clip: padding-box; }
+}
+
+/* ═══ page grain ════════════════════════════════════════════════
+   A fixed film of noise over everything. It is what stops the flat
+   dark from reading as "unstyled dark mode".
+   ═══════════════════════════════════════════════════════════════ */
+
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.38;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* A vignette that keeps the eye in the middle of the page. */
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  pointer-events: none;
+  background: radial-gradient(
+    140ch 110ch at 50% 30%,
+    transparent 40%,
+    rgba(5, 4, 3, 0.55) 100%
+  );
+}
+
+/* ═══ surfaces ══════════════════════════════════════════════════ */
+
+/* The book plate: a raised leaf of the grimoire. */
+.plate {
+  position: relative;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(236, 225, 203, 0.035),
+      rgba(236, 225, 203, 0.012) 30%,
+      transparent 70%
+    ),
+    var(--color-ink-850);
+  border: 1px solid var(--color-ink-500);
+  border-radius: 3px;
+  box-shadow:
+    0 1px 0 rgba(236, 225, 203, 0.05) inset,
+    0 24px 48px -28px rgba(0, 0, 0, 0.9);
+}
+
+/* A second hairline inside the border — the printer's double rule. */
+.plate--ruled::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(201, 162, 39, 0.14);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* Gold corner ticks, the way a frontispiece is cornered. */
+.plate--cornered::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--color-gold), var(--color-gold)) 0 0 / 11px 1px no-repeat,
+    linear-gradient(var(--color-gold), var(--color-gold)) 0 0 / 1px 11px no-repeat,
+    linear-gradient(var(--color-gold), var(--color-gold)) 100% 0 / 11px 1px no-repeat,
+    linear-gradient(var(--color-gold), var(--color-gold)) 100% 0 / 1px 11px no-repeat,
+    linear-gradient(var(--color-gold), var(--color-gold)) 0 100% / 11px 1px no-repeat,
+    linear-gradient(var(--color-gold), var(--color-gold)) 0 100% / 1px 11px no-repeat,
+    linear-gradient(var(--color-gold), var(--color-gold)) 100% 100% / 11px 1px no-repeat,
+    linear-gradient(var(--color-gold), var(--color-gold)) 100% 100% / 1px 11px no-repeat;
+  opacity: 0.5;
+}
+
+/* ═══ type treatments ═══════════════════════════════════════════ */
+
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--color-parchment-faint);
+}
+
+/* Struck gold leaf, with a slow sheen crossing the letterforms. */
+.gilt {
+  background: linear-gradient(
+    100deg,
+    var(--color-gold-deep) 0%,
+    var(--color-gold) 26%,
+    var(--color-gold-bright) 44%,
+    #fff3cf 50%,
+    var(--color-gold-bright) 56%,
+    var(--color-gold) 74%,
+    var(--color-gold-deep) 100%
+  );
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gilt-sheen 9s var(--ease-ink) infinite;
+}
+
+@keyframes gilt-sheen {
+  0%, 62% { background-position: 130% 0; }
+  100% { background-position: -30% 0; }
+}
+
+.scribe {
+  font-family: var(--font-scribe);
+  font-style: italic;
+  color: var(--color-parchment-dim);
+}
+
+/* ═══ the wax seal: the primary commit control ══════════════════ */
+
+.seal-btn {
+  --seal-face: var(--color-seal);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.7rem 1.5rem;
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: #f6ead2;
+  cursor: pointer;
+  isolation: isolate;
+  /* Deliberately irregular: wax does not set in a perfect rectangle. */
+  border-radius: 7px 5px 8px 4px;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  background:
+    radial-gradient(120% 140% at 30% 12%, rgba(255, 220, 190, 0.3), transparent 52%),
+    linear-gradient(170deg, var(--color-seal-bright), var(--seal-face) 58%, #5e1f1d);
+  box-shadow:
+    0 1px 0 rgba(255, 205, 175, 0.28) inset,
+    0 -2px 6px rgba(0, 0, 0, 0.4) inset,
+    0 10px 22px -12px rgba(140, 51, 48, 0.9);
+  transition:
+    transform 160ms var(--ease-seal),
+    box-shadow 160ms var(--ease-ink),
+    filter 160ms var(--ease-ink);
+}
+
+.seal-btn:hover:not(:disabled) {
+  transform: translateY(-1.5px);
+  filter: brightness(1.08);
+  box-shadow:
+    0 1px 0 rgba(255, 205, 175, 0.34) inset,
+    0 -2px 6px rgba(0, 0, 0, 0.4) inset,
+    0 16px 30px -14px rgba(140, 51, 48, 1);
+}
+
+.seal-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+  box-shadow:
+    0 -1px 4px rgba(0, 0, 0, 0.5) inset,
+    0 3px 8px -6px rgba(0, 0, 0, 0.8);
+}
+
+.seal-btn:disabled { opacity: 0.45; cursor: not-allowed; filter: saturate(0.5); }
+
+/* Gold variant, for the act of spending rather than committing. */
+.seal-btn--gold {
+  --seal-face: var(--color-gold-deep);
+  color: #1a1206;
+  background:
+    radial-gradient(120% 140% at 30% 12%, rgba(255, 244, 208, 0.55), transparent 52%),
+    linear-gradient(170deg, var(--color-gold-bright), var(--color-gold) 58%, #7a5f10);
+  box-shadow:
+    0 1px 0 rgba(255, 248, 220, 0.5) inset,
+    0 -2px 6px rgba(0, 0, 0, 0.3) inset,
+    0 10px 22px -12px rgba(201, 162, 39, 0.8);
+}
+
+/* ═══ the quiet control: an engraved outline ════════════════════ */
+
+.rule-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.05rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-parchment-dim);
+  background: linear-gradient(180deg, rgba(236, 225, 203, 0.045), transparent);
+  border: 1px solid var(--color-ink-500);
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    color 160ms var(--ease-ink),
+    border-color 160ms var(--ease-ink),
+    background-color 160ms var(--ease-ink),
+    transform 160ms var(--ease-seal);
+}
+
+.rule-btn:hover:not(:disabled) {
+  color: var(--color-gold-bright);
+  border-color: rgba(201, 162, 39, 0.45);
+  background-color: rgba(201, 162, 39, 0.07);
+}
+
+.rule-btn:active:not(:disabled) { transform: scale(0.97); }
+.rule-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.rule-btn[aria-pressed="true"],
+.rule-btn[data-active="true"] {
+  color: var(--color-gold-bright);
+  border-color: rgba(201, 162, 39, 0.6);
+  background-color: rgba(201, 162, 39, 0.12);
+}
+
+/* ═══ fields ════════════════════════════════════════════════════ */
+
+.field {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  color: var(--color-parchment);
+  background: rgba(5, 4, 3, 0.55);
+  border: 1px solid var(--color-ink-500);
+  border-bottom-color: var(--color-ink-400);
+  border-radius: 3px;
+  transition: border-color 160ms var(--ease-ink), box-shadow 160ms var(--ease-ink);
+}
+
+.field:hover:not(:disabled) { border-color: var(--color-ink-400); }
+
+.field:focus {
+  outline: none;
+  border-color: rgba(201, 162, 39, 0.55);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.13);
+}
+
+.field[aria-invalid="true"] {
+  border-color: var(--color-seal-bright);
+  box-shadow: 0 0 0 3px rgba(184, 81, 75, 0.14);
+}
+
+/* ═══ progress: the gold vein ═══════════════════════════════════ */
+
+.vein {
+  position: relative;
+  overflow: hidden;
+  background: rgba(5, 4, 3, 0.7);
+  border: 1px solid var(--color-ink-500);
+  border-radius: 99px;
+}
+
+.vein__fill {
+  position: relative;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    var(--color-gold-deep),
+    var(--color-gold) 55%,
+    var(--color-gold-bright)
+  );
+  box-shadow: 0 0 14px -2px rgba(201, 162, 39, 0.65);
+  transition: width 850ms var(--ease-ink);
+}
+
+/* A light travelling along the filled portion. */
+.vein__fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 248, 224, 0.5) 50%,
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: vein-travel 3.4s var(--ease-ink) infinite;
+}
+
+@keyframes vein-travel {
+  0%, 55% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Tinted variant, for the attribute rank bars. */
+.vein__fill--tone {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--tone) 55%, black),
+    var(--tone)
+  );
+  box-shadow: 0 0 12px -3px var(--tone);
+}
+
+/* ═══ ornament ══════════════════════════════════════════════════ */
+
+.fleuron {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  color: var(--color-ink-400);
+}
+
+.fleuron::before,
+.fleuron::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-ink-500), transparent);
+}
+
+/* ═══ motion ════════════════════════════════════════════════════ */
+
+/* Ink settling into the page: blurred and displaced, then sharp. */
+@keyframes ink-settle {
+  from { opacity: 0; transform: translateY(10px); filter: blur(7px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+
+.ink-in {
+  animation: ink-settle 620ms var(--ease-ink) both;
+}
+
+/* Staggered reveal for lists, set with --i on each child. */
+.ink-stagger > * {
+  animation: ink-settle 560ms var(--ease-ink) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+@keyframes ember-rise {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.35); }
+  18% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 0), var(--dy, -70px)) scale(var(--s, 1));
+  }
+}
+
+@keyframes seal-stamp {
+  0% { opacity: 0; transform: scale(1.6) rotate(-14deg); }
+  55% { opacity: 1; transform: scale(0.94) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes halo-bloom {
+  0% { opacity: 0; transform: scale(0.5); }
+  40% { opacity: 0.85; }
+  100% { opacity: 0; transform: scale(2.6); }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  42% { opacity: 0.86; }
+  46% { opacity: 1; }
+  71% { opacity: 0.9; }
+}
+
+.flicker { animation: flicker 5.5s ease-in-out infinite; }
+
+@keyframes skeleton-drift {
+  from { background-position: -220% 0; }
+  to { background-position: 220% 0; }
+}
+
+.skeleton {
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--color-ink-700) 0%,
+    var(--color-ink-600) 42%,
+    var(--color-ink-700) 84%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-drift 1.7s linear infinite;
+}
+
+/*
+  Struck through, the way a finished line is crossed off a list. Drawn as a
+  background on an INLINE element, so the rule follows the words themselves —
+  wrapping correctly across lines — rather than the width of the container.
+*/
+@keyframes strike {
+  from { background-size: 0% 1.5px; }
+  to { background-size: 100% 1.5px; }
+}
+
+.struck {
+  color: var(--color-parchment-faint);
+  background-image: linear-gradient(
+    color-mix(in oklab, currentColor 75%, transparent),
+    color-mix(in oklab, currentColor 75%, transparent)
+  );
+  background-repeat: no-repeat;
+  background-position: 0 58%;
+  background-size: 100% 1.5px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  animation: strike 380ms var(--ease-ink) both;
+}
+
+/* ═══ accessibility ═════════════════════════════════════════════ */
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Visible only once focused — the first tab stop on every page. */
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 200;
+  padding: 0.65rem 1.1rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-ink-950);
+  background: var(--color-gold);
+  border-radius: 3px;
+  transform: translateY(-160%);
+  transition: transform 180ms var(--ease-seal);
+}
+
+.skip-link:focus { transform: translateY(0); }
+
+/*
+  Everything decorative is opt-in. Under a reduced-motion preference the
+  interface still changes state — it just stops moving to say so.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .gilt {
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    color: var(--color-gold-bright);
+  }
+
+  .vein__fill::after { display: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* Honour a forced-colors environment rather than fighting it. */
+@media (forced-colors: active) {
+  .plate, .field, .rule-btn, .seal-btn { border: 1px solid CanvasText; }
+  .grain, .vignette { display: none; }
+}
