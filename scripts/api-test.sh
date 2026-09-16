@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Usage: start the dev server (npm run dev), then run: npm run test:api
-# Needs a LOCAL file database — one fixture grants gold directly in data/aetherquest.db.
-# Adversarial API checks against a running dev server.
-B=http://localhost:3000
+# Against a deployment: BASE_URL=https://your-app.vercel.app npm run test:api
+# Nine equip checks grant gold directly in data/aetherquest.db, so they only run against localhost.
+# Adversarial API checks against a running server.
+B=${BASE_URL:-http://localhost:3000}; B=${B%/}
 D=$(mktemp -d)
 A="$D/a.jar"; U2="$D/b.jar"
 RUN=$RANDOM$RANDOM
@@ -41,7 +42,7 @@ check "register A" 201 "$(req $A POST /api/auth/register "{\"displayName\":\"Wre
 check "A has 4 starter quests" 4 "$(jq_ '.snapshot.quests.length')"
 check "A starts at level 1" 1 "$(jq_ '.snapshot.character.level')"
 check "timezone stored" "Asia/Kolkata" "$(jq_ '.snapshot.user.timezone')"
-check "session cookie is HttpOnly" 1 "$(grep -c '#HttpOnly_localhost' $A)"
+check "session cookie is HttpOnly" 1 "$(grep -c '^#HttpOnly_' $A)"
 check "duplicate email (case-insensitive) -> 409" 409 "$(req $D/x.jar POST /api/auth/register "{\"displayName\":\"Wren\",\"email\":\"WREN$RUN@test.dev\",\"password\":\"hunter2hunter2\"}")"
 check "bad email -> 422" 422 "$(req $D/x.jar POST /api/auth/register '{"displayName":"Ok","email":"nope","password":"hunter2hunter2"}')"
 check "short password -> 422" 422 "$(req $D/x.jar POST /api/auth/register "{\"displayName\":\"Ok\",\"email\":\"s$RUN@t.dev\",\"password\":\"short\"}")"
@@ -127,6 +128,7 @@ check "buy same item twice -> 409" 409 "$(req $A POST /api/vault/buy '{"itemId":
 check "sigil in title slot -> 400" 400 "$(req $A POST /api/vault/equip '{"slot":"title","itemId":"sigil-ember"}')"
 check "equip Ember -> 200" 200 "$(req $A POST /api/vault/equip '{"slot":"sigil","itemId":"sigil-ember"}')"
 check "sigil resolves to glyph id" ember "$(jq_ '.snapshot.character.sigil')"
+if [[ "$B" == http://localhost* ]]; then
 A_ID=$(req $A GET /api/quests >/dev/null; jq_ '.snapshot.user.id')
 (node -e '
   const { createClient } = require("@libsql/client");
@@ -143,6 +145,9 @@ check "title resolves to display name" Wayfarer "$(jq_ '.snapshot.character.titl
 req $A GET /api/vault >/dev/null
 check "vault marks Quill as equipped" true "$(jq_ ".items.find(i=>i.id==='sigil-quill').equipped")"
 check "vault marks Ember as owned, not equipped" "true,false" "$(jq_ ".items.filter(i=>i.id==='sigil-ember').map(i=>[i.owned,i.equipped]).join()")"
+else
+  echo "  (skipped 9 equip checks: their gold fixture writes to the local database file)"
+fi
 check "unequip -> 200" 200 "$(req $A POST /api/vault/equip '{"slot":"sigil","itemId":null}')"
 check "sigil cleared" null "$(jq_ '.snapshot.character.sigil')"
 
@@ -158,7 +163,7 @@ check "after logout -> 401" 401 "$(req $D/l.jar GET /api/quests)"
 
 echo "== page protection"
 check "/sanctum signed out -> 307" 307 "$(curl -s -o /dev/null -w '%{http_code}' $B/sanctum)"
-check "  ...to /enter?next=" "/enter?next=%2Fsanctum" "$(curl -s -o /dev/null -w '%{redirect_url}' $B/sanctum | sed 's#http://localhost:3000##')"
+check "  ...to /enter?next=" "/enter?next=%2Fsanctum" "$(curl -s -o /dev/null -w '%{redirect_url}' $B/sanctum | sed "s#$B##")"
 check "/enter signed in -> 307" 307 "$(curl -s -o /dev/null -w '%{http_code}' -b $A $B/enter)"
 check "/enter?next=//evil.com renders (next sanitised server-side)" 200 "$(curl -s -o $D/page -w '%{http_code}' "$B/enter?next=//evil.com")"
 check "  ...form receives next=/sanctum" 1 "$(grep -c 'mode\\":\\"enter\\",\\"next\\":\\"/sanctum' $D/page)"
